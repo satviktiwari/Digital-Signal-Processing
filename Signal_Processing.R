@@ -1,0 +1,179 @@
+#Quantity	& its Description
+#y <- Sampled data
+#N <- length(y)	Number of samples
+#Fs	Sample frequency (samples per unit time or space)
+#dt <- 1/Fs	Time or space increment per sample
+#t <- (seq_len(n) - 1)/Fs	Time or space range for data
+#dft <- fft(y)	Discrete Fourier transform of data (DFT)
+#abs(dft)	Amplitude of the DFT
+#(abs(dft)^2)/N	Power of the DFT
+#Fs/N	Frequency increment/Frequency resolution
+#f <- (seq_len(n) - 1)*(Fs/N)	Frequency range
+
+#Installing the packages
+suppressMessages({
+  library(seewave)
+  library(tuneR)
+  library(tidyverse)
+  library(audio)
+  library(plotly) # for adding some interactivity dust
+  library(fftw)
+  library(cowplot)
+})
+
+one = "C:/Users/satvi/OneDrive/Desktop/R_Projects/moja.wav"
+
+# read and normalize wav file using tuneR
+data <- tuneR::readWave(one) %>%
+  tuneR::normalize(unit = c("1"), center = FALSE, rescale = FALSE)
+
+summary(data)
+
+# extracting sampled data, y
+y = data@left
+
+# extracting sampled data, Fs
+Fs = data@samp.rate
+
+#listen audio here:
+audio::play.audioSample(y, Fs)
+
+#plotting the amplitude
+theme_set(theme_light())
+wvfm <- ggplot(mapping = aes(x = seq_len(length(y)), y = y))+
+  geom_line(color = 'blue')+
+  labs(x = "Sample Number", y = "Amplitude", title = "Speech waveform")+
+  theme(plot.title = element_text(hjust = 0.5))
+ggplotly(wvfm)
+
+# sample index of segments with speech and those without
+speech_start <- 9715
+silence_start <- 1046197
+
+# defining the window size (number of samples in a 32ms long segment)
+N <- 32e-3*Fs
+
+# computing a spectrogram of the audio showing how frequency varies with time
+spect <- ggspectro(y, Fs, wl = N, wn = "hamming", ovlp = 50, fftw = T)+
+  geom_tile(aes(fill = amplitude))+
+  scale_fill_viridis_c()
+ggplotly(spect)
+
+# defining the window size (number of samples in a 32ms long segment)
+N_2 <- 64e-3*Fs
+
+# computing a spectrogram of the audio showing how frequency varies with time
+spect <- ggspectro(y, Fs, wl = N_2, wn = "hamming", ovlp = 50, fftw = TRUE)+
+  geom_tile(aes(fill = amplitude))+
+  scale_fill_viridis_c()
+ggplotly(spect)
+
+# Discrete Fourier transform of data (DFT)
+dft_speech <- fftw::FFT(y)
+
+# amplitude of DFT
+dft_amp <- abs(dft_speech) # DFT is a sequence of complex sinusoids 
+
+# number of samples
+n <- length(y)
+
+# frequency range
+f <- (seq_len(n)-1)*Fs/n
+
+freq_plot <- ggplot(mapping = aes(x = f[1:Fs], y = dft_amp[1:Fs]))+
+  geom_line(color = 'blue')+
+  labs(x = "Frequency (Hz)", y = "Magnitude",
+       title = "Frequency domain representation of the entire speech sequence")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplotly(freq_plot)
+
+# sample length
+sample_len = 32e-3*Fs
+
+# obtaining a 32ms long segment/256 samples without speech
+
+speech_start <- 5100
+silence_start <- 9850
+moja_sl <- y[silence_start : (silence_start + sample_len - 1)]
+
+# obtaining a 32ms long segment/256 samples with speech
+moja_sp <- y[speech_start : (speech_start + sample_len - 1)]
+
+# corresponding time-length of the sample (32ms long)
+t <- (seq_len(sample_len) - 1) * 1/Fs
+
+# plotting the waveform of the silent segment
+wvfm_sl <- ggplot(mapping = aes(x = t, y = moja_sl)) +
+  geom_line(color = 'blue', lwd = 1.1)+
+  labs(x = "Time (s)", y = "Amplitude",
+       title = "Time domain of silent segment")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+#ggplotly(wvfm_sl)
+
+# plotting the waveform of the segment with speech
+wvfm_sp <- ggplot(mapping = aes(x = t, y = moja_sp)) +
+  geom_line(color = 'blue', lwd = 1.1)+
+  labs(x = "Time (s)", y = "Amplitude",
+       title = "Time domain of speech segment")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# ggplotly(wvfm_sp)
+
+cowplot::plot_grid(wvfm_sl, wvfm_sp)
+
+# Energy of silent segment
+E_sl <- sum(moja_sl^2)
+E_sl
+
+# Energy of segment with speech
+E_sp <- sum(moja_sp^2)
+E_sp
+
+# DFT of silent segment
+dft_sl <- fftw::FFT(moja_sl)
+
+# DFT of speech segment
+dft_sp <- fftw::FFT(moja_sp)
+
+# frequency range
+fs <- (seq_len(sample_len)-1)*Fs/sample_len
+
+# plotting the waveform of the silent segment in freq domain
+freqd_sl <- ggplot(mapping = aes(x = fs[1 : (sample_len)/2],
+                                 y = abs(dft_sl[1: (sample_len)/2]))) +
+  geom_line(color = 'blue', lwd = 1.1)+
+  labs(x = "Frequency (Hz)", y = "Amplitude",
+       title = "Frequency domain of silent segment")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# ggplotly(freqd_sl)
+
+# plotting the waveform of the speech segment in freq domain
+freqd_sp <- ggplot(mapping = aes(x = fs[1 : (sample_len)/2], 
+                                 y = abs(dft_sp[1: (sample_len)/2]))) +
+  geom_line(color = 'blue', lwd = 1.1)+
+  labs(x = "Frequency (Hz)", y = "Amplitude",
+       title = "Frequency domain of speech segment")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+# ggplotly(freqd_sp)
+
+cowplot::plot_grid(freqd_sl, freqd_sp)
+
+# power of the dft
+power <-  ((abs(dft_sp))^2)/sample_len
+
+# frequency range
+fp <- (seq_len(sample_len)-1)*Fs/sample_len
+
+# power spectrum
+power_sp <- ggplot(mapping = aes(x = fp[1 : (sample_len)/2],
+                                 y = power[1: (sample_len)/2])) +
+  geom_line(color = 'blue', lwd = 1.1)+
+  labs(x = "Frequency (Hz)", y = "Power",
+       title = "Power Spectrum of speech segment")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplotly(power_sp)
